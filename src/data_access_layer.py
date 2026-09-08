@@ -32,16 +32,6 @@ def get_profile(uid):
     raise ValueError("Профиль не найден")
 
 
-def update_profile(uid, timestamp=None):
-    assert uid is not None
-    profile = get_profile(uid)
-
-    if timestamp is not None:
-        profile["timestamp"] = timestamp
-
-    return profile
-
-
 def create_query(arg, profile, description, status):
     get_profile(profile)
 
@@ -196,14 +186,6 @@ def repl():
                 case ["get_profile", uid]:
                     print(get_profile(int(uid)))
 
-                case ["update_profile", uid, *fields]:
-                    data = parse_fields(fields, {"timestamp"})
-                    timestamp = data.get("timestamp")
-
-                    if timestamp is not None:
-                        timestamp = int(timestamp)
-
-                    print(update_profile(int(uid), timestamp))
 
                 case ["create_query", arg, profile, description, status]:
                     print(create_query(arg, int(profile), description, status))
