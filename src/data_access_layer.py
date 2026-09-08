@@ -59,7 +59,8 @@ def get_query(uid):
     raise ValueError("Запрос не найден")
 
 
-def update_query(uid, arg=None, profile=None,  description=None, status=None):
+def update_query(uid, arg=None, profile=None, description=None,
+                 status=None):
     assert uid is not None
     query = get_query(uid)
 
@@ -106,7 +107,8 @@ def get_feedback(uid):
     raise ValueError("Обратная связь не найдена")
 
 
-def update_feedback(uid,  response=None,   status=None,  exception=None,  query=None):
+def update_feedback(uid, response=None, status=None,
+                    exception=None, query=None):
     assert uid is not None
     feedback = get_feedback(uid)
 
@@ -151,7 +153,8 @@ def parse_fields(parts, allowed_fields):
 
     for part in parts:
         if "=" not in part:
-            raise ValueError("Параметры редактирования задаются как поле=значение")
+            raise ValueError(
+                "Параметры редактирования задаются как поле=значение")
 
         key, value = part.split("=", 1)
 
@@ -163,82 +166,114 @@ def parse_fields(parts, allowed_fields):
     return result
 
 
+def handle_create_profile():
+    print(create_profile())
+
+
+def handle_get_profiles():
+    print(get_profiles())
+
+
+def handle_get_profile(uid):
+    print(get_profile(int(uid)))
+
+
+def handle_create_query(arg, profile, description, status):
+    print(create_query(arg, int(profile), description, status))
+
+
+def handle_get_queries():
+    print(get_queries())
+
+
+def handle_get_query(uid):
+    print(get_query(int(uid)))
+
+
+def handle_update_query(uid, *fields):
+    allowed_fields = {"arg", "profile", "description", "status"}
+    data = parse_fields(fields, allowed_fields)
+    profile = data.get("profile")
+
+    if profile is not None:
+        profile = int(profile)
+
+    arg = data.get("arg")
+    description = data.get("description")
+    status = data.get("status")
+    print(update_query(int(uid), arg, profile, description, status))
+
+
+def handle_create_feedback(response, status, exception, query):
+    print(create_feedback(response, status, exception, int(query)))
+
+
+def handle_get_feedbacks():
+    print(get_feedbacks())
+
+
+def handle_get_feedback(uid):
+    print(get_feedback(int(uid)))
+
+
+def handle_update_feedback(uid, *fields):
+    allowed_fields = {"response", "status", "exception", "query"}
+    data = parse_fields(fields, allowed_fields)
+    query = data.get("query")
+
+    if query is not None:
+        query = int(query)
+
+    response = data.get("response")
+    status = data.get("status")
+    exception = data.get("exception")
+    print(update_feedback(int(uid), response, status, exception, query))
+
+
+def handle_recent():
+    print(get_recent_exceptions())
+
+
+COMMANDS = {
+    "create_profile": handle_create_profile,
+    "get_profiles": handle_get_profiles,
+    "get_profile": handle_get_profile,
+    "create_query": handle_create_query,
+    "get_queries": handle_get_queries,
+    "get_query": handle_get_query,
+    "update_query": handle_update_query,
+    "create_feedback": handle_create_feedback,
+    "get_feedbacks": handle_get_feedbacks,
+    "get_feedback": handle_get_feedback,
+    "update_feedback": handle_update_feedback,
+    "recent": handle_recent,
+}
+
+
 def repl():
     while True:
         try:
-            command = input("> ").strip()
+            parts = input("> ").strip().split()
 
-            if command == "":
+            if not parts:
                 continue
 
-            parts = command.split()
+            command = parts[0]
 
-            match parts:
-                case ["exit"]:
-                    break
+            if command == "exit":
+                break
 
-                case ["create_profile"]:
-                    print(create_profile())
+            handler = COMMANDS.get(command)
 
-                case ["get_profiles"]:
-                    print(get_profiles())
+            if handler is None:
+                raise ValueError("Неизвестная команда")
 
-                case ["get_profile", uid]:
-                    print(get_profile(int(uid)))
-
-
-                case ["create_query", arg, profile, description, status]:
-                    print(create_query(arg, int(profile), description, status))
-
-                case ["get_queries"]:
-                    print(get_queries())
-
-                case ["get_query", uid]:
-                    print(get_query(int(uid)))
-
-                case ["update_query", uid, *fields]:
-                    allowed_fields = {"arg", "profile", "description", "status"}
-                    data = parse_fields(fields, allowed_fields)
-                    profile = data.get("profile")
-
-                    if profile is not None:
-                        profile = int(profile)
-
-                    arg = data.get("arg")
-                    description = data.get("description")
-                    status = data.get("status")
-                    print(update_query(int(uid), arg, profile, description, status))
-
-                case ["create_feedback", response, status, exception, query]:
-                    print(create_feedback(response, status, exception, int(query)))
-
-                case ["get_feedbacks"]:
-                    print(get_feedbacks())
-
-                case ["get_feedback", uid]:
-                    print(get_feedback(int(uid)))
-
-                case ["update_feedback", uid, *fields]:
-                    allowed_fields = {"response", "status", "exception", "query"}
-                    data = parse_fields(fields, allowed_fields)
-                    query = data.get("query")
-
-                    if query is not None:
-                        query = int(query)
-
-                    response = data.get("response")
-                    status = data.get("status")
-                    exception = data.get("exception")
-                    print(update_feedback(int(uid), response, status, exception, query))
-
-                case ["recent"]:
-                    print(get_recent_exceptions())
-
-                case _:
-                    print("Ошибка: неизвестная команда или неверные аргументы")
+            handler(*parts[1:])
 
         except ValueError as error:
             print("Ошибка:", error)
+        except TypeError:
+            print("Ошибка: неверное количество аргументов")
 
 
 if __name__ == "__main__":
