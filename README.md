@@ -2,9 +2,16 @@
 
 ## 1. Общее описание
 
-Проект представляет собой прототип слоя доступа к данным веб-приложения.
+Проект представляет собой прототип веб-приложения для варианта 29.
+Данные хранятся в оперативной памяти и не сохраняются на диск.
 
-На текущем этапе реализовано хранение данных в оперативной памяти без использования базы данных и без сохранения данных на диск.
+В проекте реализованы:
+
+- модель слоя доступа к данным;
+- удалённый вызов процедур на основе TCP;
+- RPC-клиент для вызова функций модели;
+- тестирование RPC на основе модели с использованием Hypothesis;
+- формирование отчёта о покрытии ветвей с использованием Coverage.
 
 Данные представлены тремя списками:
 
@@ -12,48 +19,38 @@
 - `queries` — запросы;
 - `feedbacks` — результаты обработки запросов.
 
-Каждая запись в списке представлена словарём Python.
-
-Связи между сущностями:
+Каждая запись представлена словарём Python. Связи между сущностями:
 
 ```text
 Profile -> Query -> Feedback
 ```
 
-`Query.profile` содержит идентификатор записи `Profile`, а `Feedback.query` содержит идентификатор записи `Query`.
+Поле `Query.profile` содержит идентификатор `Profile`, а поле
+`Feedback.query` содержит идентификатор `Query`.
 
-Структура проекта:
+## 2. Структура проекта
 
 ```text
 WebService/
 ├── src/
-│   └── data_access_layer.py
-└── .gitignore
+│   ├── __init__.py
+│   ├── data_access_layer.py
+│   ├── demo_rpc.py
+│   ├── rpc_client.py
+│   └── rpc_server.py
+├── tests/
+│   └── test_rpc.py
+├── .coveragerc
+├── .gitignore
+└── README.md
 ```
 
 Для работы требуется Python 3.10 или новее.
 
----
+## 3. Модель слоя доступа к данным
 
-## 2. Функции
-
-### Вспомогательные функции
-
-#### `get_next_uid(table)`
-
-Возвращает следующий свободный идентификатор `uid` для указанного списка записей.
-
-#### `parse_fields(parts, allowed_fields)`
-
-Обрабатывает параметры редактирования, переданные через REPL в формате:
-
-```text
-поле=значение
-```
-
-Также проверяет, разрешено ли изменять указанное поле.
-
----
+Модель находится в файле `src/data_access_layer.py`. Данные хранятся в
+списках `profiles`, `queries` и `feedbacks`.
 
 ### Profile
 
@@ -66,26 +63,15 @@ WebService/
 }
 ```
 
-#### `create_profile()`
+Поддерживаемые функции:
 
-Создаёт новый профиль.
+- `create_profile()`;
+- `get_profiles()`;
+- `get_profile(uid)`;
+- `update_profile(uid, timestamp=None)`.
 
-`uid` и `timestamp` устанавливаются автоматически.
-
-#### `get_profiles()`
-
-Возвращает список всех профилей.
-
-#### `get_profile(uid)`
-
-Возвращает профиль по его идентификатору.
-
-Если профиль не найден, возникает ошибка:
-
-```text
-Профиль не найден
-```
----
+Поле `uid` создаётся автоматически и не редактируется. Функция
+`update_profile` изменяет поле `timestamp`.
 
 ### Query
 
@@ -102,40 +88,15 @@ WebService/
 }
 ```
 
-#### `create_query(arg, profile, description, status)`
+Поддерживаемые функции:
 
-Создаёт новый запрос.
+- `create_query(arg, profile, description, status)`;
+- `get_queries()`;
+- `get_query(uid)`;
+- `update_query(uid, arg=None, profile=None, description=None, status=None)`.
 
-При создании проверяется существование указанного профиля.
-
-#### `get_queries()`
-
-Возвращает список всех запросов.
-
-#### `get_query(uid)`
-
-Возвращает запрос по его идентификатору.
-
-Если запрос не найден, возникает ошибка:
-
-```text
-Запрос не найден
-```
-
-#### `update_query(uid, arg=None, profile=None, description=None, status=None)`
-
-Редактирует запрос.
-
-Изменяются только переданные параметры:
-
-- `arg`;
-- `profile`;
-- `description`;
-- `status`.
-
-При изменении `profile` проверяется существование нового профиля.
-
----
+При создании запроса и изменении поля `profile` проверяется существование
+соответствующего профиля.
 
 ### Feedback
 
@@ -152,68 +113,38 @@ WebService/
 }
 ```
 
-#### `create_feedback(response, status, exception, query)`
+Поддерживаемые функции:
 
-Создаёт новую запись обратной связи.
+- `create_feedback(response, status, exception, query)`;
+- `get_feedbacks()`;
+- `get_feedback(uid)`;
+- `update_feedback(uid, response=None, status=None, exception=None,
+  query=None)`.
 
-При создании проверяется существование указанного запроса.
+При создании записи и изменении поля `query` проверяется существование
+соответствующего запроса.
 
-#### `get_feedbacks()`
+### Соединение данных
 
-Возвращает список всех записей обратной связи.
+Функция `get_recent_exceptions()` соединяет данные `Profile`, `Query` и
+`Feedback`. В результат включаются записи `Feedback`, созданные не более
+шести минут назад.
 
-#### `get_feedback(uid)`
-
-Возвращает запись по её идентификатору.
-
-Если запись не найдена, возникает ошибка:
-
-```text
-Обратная связь не найдена
-```
-
-#### `update_feedback(uid, response=None, status=None, exception=None, query=None)`
-
-Редактирует запись.
-
-Изменяются только переданные параметры:
-
-- `response`;
-- `status`;
-- `exception`;
-- `query`.
-
-При изменении `query` проверяется существование нового запроса.
-
----
-
-### `get_recent_exceptions()`
-
-Выполняет соединение данных `Profile`, `Query` и `Feedback`.
-
-В результат попадают записи `Feedback`, созданные не более 6 минут назад.
-
-Для каждой найденной записи возвращаются:
+Результат содержит поля:
 
 - `exception` из `Feedback`;
 - `description` из `Query`.
 
-Пример результата:
+Всего модель содержит 13 основных функций: по четыре функции для каждой из
+трёх сущностей и одну функцию соединения данных.
 
-```python
-[
-    {
-        "exception": "TimeoutError",
-        "description": "test",
-    }
-]
+## 4. REPL
+
+Для запуска интерактивного режима выполните:
+
+```bash
+python3 src/data_access_layer.py
 ```
-
----
-
-### `repl()`
-
-Запускает интерактивный режим работы со слоем доступа к данным.
 
 Поддерживаемые команды:
 
@@ -221,6 +152,7 @@ WebService/
 create_profile
 get_profiles
 get_profile <uid>
+update_profile <uid> <timestamp>
 
 create_query <arg> <profile> <description> <status>
 get_queries
@@ -236,118 +168,98 @@ recent
 exit
 ```
 
----
+## 5. RPC на основе TCP
 
-## 3. Сборка и запуск
+RPC-сервер находится в `src/rpc_server.py`, а клиент — в
+`src/rpc_client.py`.
 
-Проект не требует отдельной сборки и не использует сторонние зависимости.
+Сервер принимает запрос, определяет функцию по коду операции, вызывает её в
+модели слоя данных и возвращает результат клиенту. Тела запросов и ответов
+передаются в формате JSON. Используется порядок байт от старшего к младшему.
 
-Клонирование репозитория:
+### Структура запроса
+
+| Поле | Размер |
+| --- | ---: |
+| Размер тела запроса | 3 байта |
+| Код операции | 2 байта |
+| Тело в формате JSON | Определяется запросом |
+
+### Структура ответа
+
+| Поле | Размер |
+| --- | ---: |
+| Версия протокола | 1 байт |
+| Код операции | 2 байта |
+| Размер тела ответа | 5 байт |
+| Тело в формате JSON | Определяется ответом |
+
+Коды операций:
+
+| Код | Метод |
+| ---: | --- |
+| 1 | `create_profile` |
+| 2 | `get_profiles` |
+| 3 | `get_profile` |
+| 4 | `update_profile` |
+| 5 | `create_query` |
+| 6 | `get_queries` |
+| 7 | `get_query` |
+| 8 | `update_query` |
+| 9 | `create_feedback` |
+| 10 | `get_feedbacks` |
+| 11 | `get_feedback` |
+| 12 | `update_feedback` |
+| 13 | `get_recent_exceptions` |
+
+Все полученные RPC-запросы журналируются в стандартный вывод сервера.
+
+### Запуск сервера
+
+Из корня проекта выполните:
 
 ```bash
-git clone https://github.com/BlakeYH125/WebService.git
-cd WebService
+python3 -m src.rpc_server
 ```
 
-Запуск:
+По умолчанию сервер запускается по адресу `127.0.0.1:5000`.
+
+### Демонстрация клиента
+
+Не останавливая сервер, откройте второй терминал и выполните:
 
 ```bash
-python src/data_access_layer.py
+python3 src/demo_rpc.py
 ```
 
-или:
+Файл `demo_rpc.py` последовательно вызывает все 13 методов RPC-клиента.
+
+## 6. Тестирование на основе модели
+
+Тест находится в файле `tests/test_rpc.py` и использует класс
+`RuleBasedStateMachine` из библиотеки Hypothesis.
+
+Во время тестирования используются два состояния:
+
+- настоящее состояние, которое хранится на RPC-сервере;
+- упрощённая модель из списков `profiles`, `queries` и `feedbacks`.
+
+Hypothesis генерирует последовательности создания и редактирования записей.
+После каждого действия инвариант получает данные через RPC и сравнивает их с
+упрощённой моделью. В тесте вызываются все 13 методов RPC-клиента.
+
+### Установка библиотек
+
+Активируйте виртуальное окружение и установите зависимости:
 
 ```bash
-python3 src/data_access_layer.py
+python3 -m pip install hypothesis coverage
 ```
 
-После запуска открывается REPL:
+### Запуск тестирования
 
-```text
->
-```
-
-Автоматические тесты на текущем этапе проекта не реализованы.
-
----
-
-## 4. Примеры использования
-
-### Создание профиля
-
-```text
-> create_profile
-{'uid': 1, 'timestamp': 1750000000}
-```
-
-### Получение всех профилей
-
-```text
-> get_profiles
-[{'uid': 1, 'timestamp': 1750000000}]
-```
-
-### Получение профиля
-
-```text
-> get_profile 1
-{'uid': 1, 'timestamp': 1750000000}
-```
-
-### Создание запроса
-
-```text
-> create_query python 1 test new
-{'uid': 1, 'timestamp': 1750000200, 'arg': 'python', 'profile': 1, 'description': 'test', 'status': 'new'}
-```
-
-### Частичное изменение запроса
-
-```text
-> update_query 1 status=done
-{'uid': 1, 'timestamp': 1750000200, 'arg': 'python', 'profile': 1, 'description': 'test', 'status': 'done'}
-```
-
-Можно изменить несколько полей:
-
-```text
-> update_query 1 description=new_description status=processed
-```
-
-### Создание Feedback
-
-```text
-> create_feedback response error TimeoutError 1
-{'uid': 1, 'timestamp': 1750000300, 'response': 'response', 'status': 'error', 'exception': 'TimeoutError', 'query': 1}
-```
-
-### Изменение Feedback
-
-```text
-> update_feedback 1 status=processed
-```
-
-### Выборка записей за последние 6 минут
-
-```text
-> recent
-[{'exception': 'TimeoutError', 'description': 'new_description'}]
-```
-
-### Обработка ошибки
-
-```text
-> get_profile 100
-Ошибка: Профиль не найден
-```
-
-```text
-> get_query 100
-Ошибка: Запрос не найден
-```
-
-### Завершение работы
-
-```text
-> exit
+```bash
+python3 -m coverage erase
+python3 -m coverage run -m unittest discover -s tests
+python3 -m coverage report -m
 ```
