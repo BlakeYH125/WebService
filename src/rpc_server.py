@@ -1,6 +1,6 @@
 import json
 import socket
-import data_access_layer as data
+from src import data_access_layer as data
 
 HOST = "127.0.0.1"
 PORT = 5000
