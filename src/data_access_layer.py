@@ -32,6 +32,14 @@ def get_profile(uid):
     raise ValueError("Профиль не найден")
 
 
+def update_profile(uid, timestamp=None):
+    assert uid is not None
+    profile = get_profile(uid)
+    if timestamp is not None:
+        profile["timestamp"] = timestamp
+    return profile
+
+
 def create_query(arg, profile, description, status):
     get_profile(profile)
 
@@ -178,6 +186,10 @@ def handle_get_profile(uid):
     print(get_profile(int(uid)))
 
 
+def handle_update_profile(uid, timestamp):
+    print(update_profile(int(uid), int(timestamp)))
+
+
 def handle_create_query(arg, profile, description, status):
     print(create_query(arg, int(profile), description, status))
 
@@ -238,6 +250,7 @@ COMMANDS = {
     "create_profile": handle_create_profile,
     "get_profiles": handle_get_profiles,
     "get_profile": handle_get_profile,
+    "update_profile": handle_update_profile,
     "create_query": handle_create_query,
     "get_queries": handle_get_queries,
     "get_query": handle_get_query,
