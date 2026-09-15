@@ -1,6 +1,7 @@
 import socket
 import time
 from threading import Thread
+from unittest.mock import patch
 
 from hypothesis import settings, strategies as st
 from hypothesis.stateful import (
@@ -91,17 +92,13 @@ class RPCStateMachine(RuleBasedStateMachine):
         )
 
     def expected_recent_exceptions(self):
-        result = []
-        for profile in self.profiles:
-            for query in self.queries:
-                if profile["uid"] == query["profile"]:
-                    for feedback in self.feedbacks:
-                        if query["uid"] == feedback["query"]:
-                            result.append({
-                                "exception": feedback["exception"],
-                                "description": query["description"],
-                            })
-        return result
+        with patch.multiple(
+            data,
+            profiles=self.profiles,
+            queries=self.queries,
+            feedbacks=self.feedbacks,
+        ):
+            return data.get_recent_exceptions()
 
     @rule()
     def create_profile(self):
