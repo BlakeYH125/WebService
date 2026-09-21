@@ -253,13 +253,13 @@ Hypothesis генерирует последовательности созда�
 Активируйте виртуальное окружение и установите зависимости:
 
 ```bash
-python3 -m pip install hypothesis coverage
+python -m pip install hypothesis coverage
 ```
 
 ### Запуск тестирования
 
 ```bash
-python3 -m coverage erase
-python3 -m coverage run -m unittest discover -s tests
-python3 -m coverage report -m
+python -m coverage erase
+python -m coverage run -m unittest discover -s tests
+python -m coverage report -m
 ```
