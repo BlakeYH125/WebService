@@ -1,5 +1,6 @@
 import json
 import socket
+
 from src import data_access_layer as data
 
 HOST = "127.0.0.1"
@@ -50,8 +51,8 @@ def handle_request(connection):
         response = {"error": str(error) or "Некорректные аргументы"}
 
     body = json.dumps(response, ensure_ascii=False).encode("utf-8")
-    response_header = (PROTOCOL_VERSION.to_bytes(1, "big") +
-                       operation_code.to_bytes(2, "big")
+    response_header = (PROTOCOL_VERSION.to_bytes(1, "big")
+                       + operation_code.to_bytes(2, "big")
                        + len(body).to_bytes(5, "big"))
     connection.sendall(response_header + body)
 
