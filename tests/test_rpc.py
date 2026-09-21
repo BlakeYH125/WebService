@@ -93,10 +93,10 @@ class RPCStateMachine(RuleBasedStateMachine):
 
     def expected_recent_exceptions(self):
         with patch.multiple(
-            data,
-            profiles=self.profiles,
-            queries=self.queries,
-            feedbacks=self.feedbacks,
+                data,
+                profiles=self.profiles,
+                queries=self.queries,
+                feedbacks=self.feedbacks,
         ):
             return data.get_recent_exceptions()
 

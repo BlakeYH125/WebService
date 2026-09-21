@@ -13,7 +13,7 @@ print("7. get_query:", client.get_query(1))
 print("8. update_query:", client.update_query(
     1, description="updated", status="done"))
 print("9. create_feedback:", client.create_feedback(
-    "result","error", "TimeoutError", 1))
+    "result", "error", "TimeoutError", 1))
 print("10. get_feedbacks:", client.get_feedbacks())
 print("11. get_feedback:", client.get_feedback(1))
 print("12. update_feedback:", client.update_feedback(
