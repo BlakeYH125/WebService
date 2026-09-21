@@ -40,7 +40,8 @@ class RPCClient:
     def call(self, method, *args):
         operation_code = OPERATION_CODES[method]
         body = json.dumps({"args": args}, ensure_ascii=False).encode("utf-8")
-        header = len(body).to_bytes(3, "big") + operation_code.to_bytes(2, "big")
+        header = (len(body).to_bytes(3, "big")
+                  + operation_code.to_bytes(2, "big"))
 
         with socket.create_connection((self.host, self.port)) as connection:
             connection.sendall(header + body)
@@ -48,7 +49,8 @@ class RPCClient:
             version = response_header[0]
             response_code = int.from_bytes(response_header[1:3], "big")
             response_size = int.from_bytes(response_header[3:8], "big")
-            response = json.loads(receive_exact(connection, response_size).decode("utf-8"))
+            response = json.loads(
+                receive_exact(connection, response_size).decode("utf-8"))
 
         if version != PROTOCOL_VERSION:
             raise ValueError("Неподдерживаемая версия протокола")
@@ -79,11 +81,14 @@ class RPCClient:
     def get_query(self, uid):
         return self.call("get_query", uid)
 
-    def update_query(self, uid, arg=None, profile=None, description=None, status=None):
-        return self.call("update_query", uid, arg, profile, description, status)
+    def update_query(self, uid, arg=None, profile=None,
+                     description=None, status=None):
+        return self.call("update_query", uid,
+                         arg, profile, description, status)
 
     def create_feedback(self, response, status, exception, query):
-        return self.call("create_feedback", response, status, exception, query)
+        return self.call("create_feedback", response,
+                         status, exception, query)
 
     def get_feedbacks(self):
         return self.call("get_feedbacks")
@@ -91,8 +96,10 @@ class RPCClient:
     def get_feedback(self, uid):
         return self.call("get_feedback", uid)
 
-    def update_feedback(self, uid, response=None, status=None, exception=None, query=None):
-        return self.call("update_feedback", uid, response, status, exception, query)
+    def update_feedback(self, uid, response=None, status=None,
+                        exception=None, query=None):
+        return self.call("update_feedback", uid, response,
+                         status, exception, query)
 
     def get_recent_exceptions(self):
         return self.call("get_recent_exceptions")
