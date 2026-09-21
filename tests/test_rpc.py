@@ -165,20 +165,22 @@ class RPCStateMachine(RuleBasedStateMachine):
             )
             raise AssertionError(message)
 
+    @staticmethod
+    def assert_items_match(get_item, expected_items):
+        for expected_item in expected_items:
+            received_item = get_item(expected_item["uid"])
+            assert received_item == expected_item
+
     @invariant()
     def rpc_state_matches_model(self):
         assert self.client.get_profiles() == self.profiles
         assert self.client.get_queries() == self.queries
         assert self.client.get_feedbacks() == self.feedbacks
-        for profile in self.profiles:
-            received = self.client.get_profile(profile["uid"])
-            assert received == profile
-        for query in self.queries:
-            received = self.client.get_query(query["uid"])
-            assert received == query
-        for feedback in self.feedbacks:
-            received = self.client.get_feedback(feedback["uid"])
-            assert received == feedback
+
+        self.assert_items_match(self.client.get_profile, self.profiles)
+        self.assert_items_match(self.client.get_query, self.queries)
+        self.assert_items_match(self.client.get_feedback, self.feedbacks)
+
         assert self.client.get_recent_exceptions() == (
             self.expected_recent_exceptions()
         )
