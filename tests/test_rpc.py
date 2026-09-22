@@ -103,7 +103,7 @@ class RPCStateMachine(RuleBasedStateMachine):
     @rule()
     def create_profile(self):
         profile = self.client.create_profile()
-        self.profiles.append(profile.copy())
+        self.profiles.append({**profile})
 
     @rule(timestamp=st.integers(min_value=1, max_value=2000000000))
     def update_profile(self, timestamp):
@@ -120,7 +120,10 @@ class RPCStateMachine(RuleBasedStateMachine):
             description,
             status,
         )
-        self.queries.append(query.copy())
+        self.queries.append({**query,
+                             'arg': arg,
+                             "description": description,
+                             "status": status})
 
     @rule(arg=TEXT, description=TEXT, status=STATUS)
     def update_query(self, arg, description, status):
@@ -140,7 +143,10 @@ class RPCStateMachine(RuleBasedStateMachine):
             exception,
             self.queries[0]["uid"],
         )
-        self.feedbacks.append(feedback.copy())
+        self.feedbacks.append({**feedback,
+                               'response': response,
+                               'status': status,
+                               'exception': exception})
 
     @rule(response=TEXT, status=STATUS, exception=TEXT)
     def update_feedback(self, response, status, exception):
