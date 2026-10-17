@@ -13,3 +13,7 @@ venv/
 .coverage
 htmlcov/
 .hypothesis/
+
+examples/*.jpg
+examples/*.jpeg
+examples/*.png
