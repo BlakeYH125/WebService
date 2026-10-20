@@ -62,7 +62,7 @@ def serve_forever():
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind((HOST, PORT))
         server.listen()
-        print(f"RPC server started on {HOST}:{PORT}")
+        print(f"RPC server started on {HOST}: {PORT}")
 
         while True:
             connection, _ = server.accept()
