@@ -2,9 +2,13 @@
 branch = True
 source = src
 concurrency = thread
-
-[report]
-show_missing = True
 omit =
     src/data_access_layer.py
     src/demo_rpc.py
+    src/jpeg_to_png.py
+    src/rpc_client.py
+    src/rpc_server.py
+    src/demo_http.py
+
+[report]
+show_missing = True
