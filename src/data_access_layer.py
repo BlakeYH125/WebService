@@ -3,17 +3,20 @@ import time
 profiles = []
 queries = []
 feedbacks = []
+MIN_UID = 1
 
 
-def get_next_uid(table):
-    if len(table) == 0:
-        return 1
-    return max(record["uid"] for record in table) + 1
+def validate_new_uid(uid, table, entity_name):
+    if uid < MIN_UID:
+        raise ValueError("UID должен быть положительным")
+    if any(record["uid"] == uid for record in table):
+        raise ValueError(f"{entity_name} с таким UID уже существует")
 
 
-def create_profile():
+def create_profile(uid):
+    validate_new_uid(uid, profiles, "Профиль")
     profile = {
-        "uid": get_next_uid(profiles),
+        "uid": uid,
         "timestamp": int(time.time()),
     }
     profiles.append(profile)
@@ -40,11 +43,12 @@ def update_profile(uid, timestamp=None):
     return profile
 
 
-def create_query(arg, profile, description, status):
+def create_query(uid, arg, profile, description, status):
+    validate_new_uid(uid, queries, "Запрос")
     get_profile(profile)
 
     query = {
-        "uid": get_next_uid(queries),
+        "uid": uid,
         "timestamp": int(time.time()),
         "arg": arg,
         "profile": profile,
@@ -67,8 +71,7 @@ def get_query(uid):
     raise ValueError("Запрос не найден")
 
 
-def update_query(uid, arg=None, profile=None, description=None,
-                 status=None):
+def update_query(uid, arg=None, profile=None, description=None, status=None):
     assert uid is not None
     query = get_query(uid)
 
@@ -88,11 +91,12 @@ def update_query(uid, arg=None, profile=None, description=None,
     return query
 
 
-def create_feedback(response, status, exception, query):
+def create_feedback(uid, response, status, exception, query):
+    validate_new_uid(uid, feedbacks, "Результат")
     get_query(query)
 
     feedback = {
-        "uid": get_next_uid(feedbacks),
+        "uid": uid,
         "timestamp": int(time.time()),
         "response": response,
         "status": status,
@@ -174,8 +178,8 @@ def parse_fields(parts, allowed_fields):
     return result
 
 
-def handle_create_profile():
-    print(create_profile())
+def handle_create_profile(uid):
+    print(create_profile(int(uid)))
 
 
 def handle_get_profiles():
@@ -190,8 +194,8 @@ def handle_update_profile(uid, timestamp):
     print(update_profile(int(uid), int(timestamp)))
 
 
-def handle_create_query(arg, profile, description, status):
-    print(create_query(arg, int(profile), description, status))
+def handle_create_query(uid, arg, profile, description, status):
+    print(create_query(int(uid), arg, int(profile), description, status))
 
 
 def handle_get_queries():
@@ -216,8 +220,10 @@ def handle_update_query(uid, *fields):
     print(update_query(int(uid), arg, profile, description, status))
 
 
-def handle_create_feedback(response, status, exception, query):
-    print(create_feedback(response, status, exception, int(query)))
+def handle_create_feedback(uid, response, status, exception, query):
+    uid = int(uid)
+    query = int(query)
+    print(create_feedback(uid, response, status, exception, query))
 
 
 def handle_get_feedbacks():
