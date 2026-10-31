@@ -4,6 +4,7 @@ profiles = []
 queries = []
 feedbacks = []
 MIN_UID = 1
+RECENT_PERIOD_SECONDS = 6 * 60
 
 
 def validate_new_uid(uid, table, entity_name):
@@ -149,7 +150,8 @@ def get_recent_exceptions():
             if profile["uid"] == query["profile"]:
                 for feedback in feedbacks:
                     query_matches = query["uid"] == feedback["query"]
-                    is_recent = feedback["timestamp"] >= now - 360
+                    is_recent = (feedback["timestamp"]
+                                 >= now - RECENT_PERIOD_SECONDS)
 
                     if query_matches and is_recent:
                         result.append({

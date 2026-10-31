@@ -8,7 +8,6 @@ omit =
     src/jpeg_to_png.py
     src/rpc_client.py
     src/rpc_server.py
-    src/demo_http.py
 
 [report]
 show_missing = True

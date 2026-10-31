@@ -7,13 +7,11 @@
 ```text
 WebService/
 ├── examples/
-│   ├── example_1.jpeg
-│   ├── example_2.jpeg
-│   ├── example_3.jpeg
 │   └── run_examples.sh
 ├── src/
-│   ├── data_access_layer.py
-│   ├── demo_http.py
+    ├── __init__.py
+    ├── data_access_layer.py
+│   ├── demo_rpc.py
 │   ├── http_client.py
 │   ├── http_server.py
 │   ├── jpeg_to_png.py

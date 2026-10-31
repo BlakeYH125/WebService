@@ -4,6 +4,7 @@ import requests
 
 BASE_URL = "http://127.0.0.1:8888"
 NUMBER_FIELDS = {"uid", "timestamp", "profile", "query"}
+UNAUTHORIZED_STATUS = 401
 
 
 def make_xml(root_tag, values):
@@ -27,7 +28,7 @@ def parse_record(element):
 
 def parse_response(response):
     root = ElementTree.fromstring(response.content)
-    if response.status_code == 401:
+    if response.status_code == UNAUTHORIZED_STATUS:
         raise PermissionError(root.findtext("message"))
     if root.tag == "error":
         raise ValueError(root.findtext("message"))

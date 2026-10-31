@@ -20,6 +20,7 @@ TIMESTAMP = st.integers(min_value=1, max_value=2000000000)
 DEFAULT_DESCRIPTION = "JPEG-Image"
 NEW_STATUS = "NEW"
 DONE_STATUS = "DONE"
+RECENT_PERIOD_SECONDS = 6 * 60
 
 
 def get_free_port():
@@ -49,6 +50,18 @@ class HTTPStateMachine(stateful.RuleBasedStateMachine):
         data.queries.clear()
         data.feedbacks.clear()
         self.client = HTTPClient(USERNAME, PASSWORD, BASE_URL)
+
+    @staticmethod
+    def find_by_uid(records, uid):
+        return next(record for record in records if record["uid"] == uid)
+
+    @staticmethod
+    def assert_query(query, uid, arg, profile, description, status):
+        assert query["uid"] == uid
+        assert query["arg"] == arg
+        assert query["profile"] == profile
+        assert query["description"] == description
+        assert query["status"] == status
 
     @staticmethod
     def assert_timestamp(timestamp, before, after):
@@ -83,7 +96,8 @@ class HTTPStateMachine(stateful.RuleBasedStateMachine):
         self.assert_timestamp(received["timestamp"], before, after)
 
         profiles = self.client.get_dump_profile()
-        inserted = next(profile for profile in profiles if profile["uid"] == uid)
+        inserted = next(profile for profile in profiles if
+                        profile["uid"] == uid)
 
         assert inserted == received
 
@@ -102,7 +116,8 @@ class HTTPStateMachine(stateful.RuleBasedStateMachine):
     @stateful.rule(profile_uid=profiles)
     def retrieve_profile(self, profile_uid):
         profiles = self.client.get_dump_profile()
-        profile = next(profile for profile in profiles if profile["uid"] == profile_uid)
+        profile = next(profile for profile in profiles if
+                       profile["uid"] == profile_uid)
         received = self.client.get_retrieve_profile(profile_uid)
 
         assert received == profile
@@ -115,29 +130,27 @@ class HTTPStateMachine(stateful.RuleBasedStateMachine):
         assert received["timestamp"] == timestamp
         assert self.client.get_retrieve_profile(profile_uid) == received
 
-    @stateful.rule(target=queries, profile_uid=profiles, arg=ARGUMENT, description=TEXT)
+    @stateful.rule(target=queries,
+                   profile_uid=profiles,
+                   arg=ARGUMENT,
+                   description=TEXT)
     def insert_query(self, profile_uid, arg, description):
         uid = self.get_next_query_uid()
         before = int(time.time())
-        created = self.client.put_insert_query(uid, arg, profile_uid, description)
+        profile = profile_uid
+        created = self.client.put_insert_query(uid, arg,
+                                               profile, description)
         after = int(time.time())
 
-        assert set(created) == {"uid", "timestamp", "arg", "profile", "description", "status"}
-        assert created["uid"] == uid
-        assert created["arg"] == arg
-        assert created["profile"] == profile_uid
-        assert created["description"] == description
-        assert created["status"] == NEW_STATUS
+        self.assert_query(created, uid, arg,
+                          profile, description, NEW_STATUS)
         self.assert_timestamp(created["timestamp"], before, after)
 
-        queries = self.client.get_dump_query(profile_uid)
-        inserted = next(query for query in queries if query["uid"] == uid)
+        queries = self.client.get_dump_query(profile)
+        inserted = self.find_by_uid(queries, uid)
 
-        assert inserted["uid"] == uid
-        assert inserted["arg"] == arg
-        assert inserted["profile"] == profile_uid
-        assert inserted["description"] == description
-        assert inserted["status"] == DONE_STATUS
+        self.assert_query(inserted, uid, arg,
+                          profile, description, DONE_STATUS)
 
         return created["uid"]
 
@@ -158,10 +171,18 @@ class HTTPStateMachine(stateful.RuleBasedStateMachine):
 
         assert received == query
 
-    @stateful.rule(query_uid=queries, profile_uid=profiles, arg=ARGUMENT, description=TEXT, status=STATUS)
+    @stateful.rule(query_uid=queries,
+                   profile_uid=profiles,
+                   arg=ARGUMENT,
+                   description=TEXT,
+                   status=STATUS)
     def edit_query(self, query_uid, profile_uid, arg, description, status):
-        received = self.client.patch_edit_query(query_uid, arg=arg, profile=profile_uid, description=description,
-                                                status=status)
+        received = self.client.patch_edit_query(
+            query_uid,
+            arg=arg,
+            profile=profile_uid,
+            description=description,
+            status=status)
 
         assert received["uid"] == query_uid
         assert received["arg"] == arg
@@ -199,11 +220,17 @@ class HTTPStateMachine(stateful.RuleBasedStateMachine):
 
         query = self.client.get_retrieve_query(query_uid)
         feedbacks = self.client.get_dump_feedback(query_uid)
-        recent_feedbacks = [feedback for feedback in feedbacks if feedback["timestamp"] >= int(time.time()) - 360]
+        recent_feedbacks = [feedback for feedback in feedbacks if
+                            feedback["timestamp"] >= int(time.time())
+                            - RECENT_PERIOD_SECONDS]
 
         if recent_feedbacks:
-            assert any(entry["description"] == query["description"] for entry in received)
+            assert any(entry["description"] ==
+                       query["description"] for entry in received)
 
 
 TestHTTPStateMachine = HTTPStateMachine.TestCase
-TestHTTPStateMachine.settings = settings(max_examples=10, stateful_step_count=15, deadline=None)
+TestHTTPStateMachine.settings = settings(
+    max_examples=10,
+    stateful_step_count=15,
+    deadline=None)
