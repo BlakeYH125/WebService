@@ -11,7 +11,7 @@ DEFAULT_DATABASE_FILE = (
         Path(__file__).resolve().parent.parent / "webservice.db")
 DATABASE_ENVIRONMENT_VARIABLE = "WEBSERVICE_DATABASE_FILE"
 DATABASE_NAME = os.getenv(DATABASE_ENVIRONMENT_VARIABLE)
-DATABASE_FILE = Path(DATABASE_NAME)\
+DATABASE_FILE = Path(DATABASE_NAME) \
     if DATABASE_NAME else DEFAULT_DATABASE_FILE
 DATABASE_URL = f"sqlite:///{DATABASE_FILE}"
 CONNECTION_OPTIONS = {"check_same_thread": False}
@@ -41,7 +41,7 @@ class QueryRecord(Base):
     timestamp: orm.Mapped[int] = orm.mapped_column(sa.Integer,
                                                    nullable=False)
     arg: orm.Mapped[str] = orm.mapped_column(sa.String, nullable=False)
-    profile: orm.Mapped[int] =(
+    profile: orm.Mapped[int] = (
         orm.mapped_column(sa.ForeignKey("profiles.uid")))
     description: orm.Mapped[str] = orm.mapped_column(sa.String,
                                                      nullable=False)
@@ -61,7 +61,7 @@ class FeedbackRecord(Base):
                                                 nullable=False)
     exception: orm.Mapped[str] = orm.mapped_column(sa.String,
                                                    nullable=False)
-    query: orm.Mapped[int] =(
+    query: orm.Mapped[int] = (
         orm.mapped_column(sa.ForeignKey("queries.uid")))
 
 
