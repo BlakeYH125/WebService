@@ -1,18 +1,24 @@
+import importlib
 import logging
+import os
 import socket
+import tempfile
 import time
+from pathlib import Path
 from threading import Thread
 
 from hypothesis import settings, stateful
 from hypothesis import strategies as st
 from werkzeug.serving import make_server
 
-from src import data_access_layer as data
-from src.http_client import HTTPClient
-from src.http_server import app
-
 USERNAME = "student"
 PASSWORD = "student"
+TEST_DATABASE_DIRECTORY = tempfile.TemporaryDirectory()
+TEST_DATABASE_FILE = Path(TEST_DATABASE_DIRECTORY.name) / "webservice_test.db"
+os.environ["WEBSERVICE_DATABASE_FILE"] = str(TEST_DATABASE_FILE)
+data = importlib.import_module("src.data_access_layer")
+HTTPClient = importlib.import_module("src.http_client").HTTPClient
+app = importlib.import_module("src.http_server").app
 TEXT = st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=8)
 ARGUMENT = TEXT.map(lambda name: f"/tmp/{name}.jpeg")
 STATUS = st.sampled_from(["NEW", "DONE", "ERROR"])
@@ -46,9 +52,7 @@ class HTTPStateMachine(stateful.RuleBasedStateMachine):
 
     @stateful.initialize()
     def initialize(self):
-        data.profiles.clear()
-        data.queries.clear()
-        data.feedbacks.clear()
+        data.reset_database()
         self.client = HTTPClient(USERNAME, PASSWORD, BASE_URL)
 
     @staticmethod

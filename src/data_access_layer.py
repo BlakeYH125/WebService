@@ -1,301 +1,282 @@
+import os
 import time
+from pathlib import Path
 
-profiles = []
-queries = []
-feedbacks = []
+import sqlalchemy as sa
+from sqlalchemy import orm
+
 MIN_UID = 1
 RECENT_PERIOD_SECONDS = 6 * 60
+DEFAULT_DATABASE_FILE = (
+        Path(__file__).resolve().parent.parent / "webservice.db")
+DATABASE_ENVIRONMENT_VARIABLE = "WEBSERVICE_DATABASE_FILE"
+DATABASE_NAME = os.getenv(DATABASE_ENVIRONMENT_VARIABLE)
+DATABASE_FILE = Path(DATABASE_NAME)\
+    if DATABASE_NAME else DEFAULT_DATABASE_FILE
+DATABASE_URL = f"sqlite:///{DATABASE_FILE}"
+CONNECTION_OPTIONS = {"check_same_thread": False}
+ENGINE = sa.create_engine(DATABASE_URL, connect_args=CONNECTION_OPTIONS)
+SessionFactory = orm.sessionmaker(bind=ENGINE)
+PROFILE_NOT_FOUND = "Профиль не найден"
+QUERY_NOT_FOUND = "Запрос не найден"
+FEEDBACK_NOT_FOUND = "Обратная связь не найдена"
 
 
-def validate_new_uid(uid, table, entity_name):
+class Base(orm.DeclarativeBase):
+    pass
+
+
+class ProfileRecord(Base):
+    __tablename__ = "profiles"
+
+    uid: orm.Mapped[int] = orm.mapped_column(sa.Integer, primary_key=True)
+    timestamp: orm.Mapped[int] = orm.mapped_column(sa.Integer,
+                                                   nullable=False)
+
+
+class QueryRecord(Base):
+    __tablename__ = "queries"
+
+    uid: orm.Mapped[int] = orm.mapped_column(sa.Integer, primary_key=True)
+    timestamp: orm.Mapped[int] = orm.mapped_column(sa.Integer,
+                                                   nullable=False)
+    arg: orm.Mapped[str] = orm.mapped_column(sa.String, nullable=False)
+    profile: orm.Mapped[int] =(
+        orm.mapped_column(sa.ForeignKey("profiles.uid")))
+    description: orm.Mapped[str] = orm.mapped_column(sa.String,
+                                                     nullable=False)
+    status: orm.Mapped[str] = orm.mapped_column(sa.String,
+                                                nullable=False)
+
+
+class FeedbackRecord(Base):
+    __tablename__ = "feedbacks"
+
+    uid: orm.Mapped[int] = orm.mapped_column(sa.Integer, primary_key=True)
+    timestamp: orm.Mapped[int] = orm.mapped_column(sa.Integer,
+                                                   nullable=False)
+    response: orm.Mapped[str] = orm.mapped_column(sa.String,
+                                                  nullable=False)
+    status: orm.Mapped[str] = orm.mapped_column(sa.String,
+                                                nullable=False)
+    exception: orm.Mapped[str] = orm.mapped_column(sa.String,
+                                                   nullable=False)
+    query: orm.Mapped[int] =(
+        orm.mapped_column(sa.ForeignKey("queries.uid")))
+
+
+Base.metadata.create_all(ENGINE)
+
+
+def profile_to_dict(profile):
+    return {"uid": profile.uid, "timestamp": profile.timestamp}
+
+
+def query_to_dict(query):
+    return {
+        "uid": query.uid,
+        "timestamp": query.timestamp,
+        "arg": query.arg,
+        "profile": query.profile,
+        "description": query.description,
+        "status": query.status,
+    }
+
+
+def feedback_to_dict(feedback):
+    return {
+        "uid": feedback.uid,
+        "timestamp": feedback.timestamp,
+        "response": feedback.response,
+        "status": feedback.status,
+        "exception": feedback.exception,
+        "query": feedback.query,
+    }
+
+
+def validate_new_uid(session, model, uid, entity_name):
     if uid < MIN_UID:
         raise ValueError("UID должен быть положительным")
-    if any(record["uid"] == uid for record in table):
-        raise ValueError(f"{entity_name} с таким UID уже существует")
+    if session.get(model, uid) is not None:
+        message = f"{entity_name} с таким UID уже существует"
+        raise ValueError(message)
+
+
+def require_record(session, model, uid, message):
+    record = session.get(model, uid)
+    if record is None:
+        raise ValueError(message)
+    return record
 
 
 def create_profile(uid):
-    validate_new_uid(uid, profiles, "Профиль")
-    profile = {
-        "uid": uid,
-        "timestamp": int(time.time()),
-    }
-    profiles.append(profile)
-    return profile
+    with SessionFactory.begin() as session:
+        validate_new_uid(session, ProfileRecord, uid, "Профиль")
+        profile = ProfileRecord(uid=uid, timestamp=int(time.time()))
+        session.add(profile)
+        session.flush()
+        return profile_to_dict(profile)
 
 
 def get_profiles():
-    return profiles
+    with SessionFactory() as session:
+        statement = sa.select(ProfileRecord).order_by(ProfileRecord.uid)
+        profiles = session.scalars(statement).all()
+        return [profile_to_dict(profile) for profile in profiles]
 
 
 def get_profile(uid):
     assert uid is not None
-    for profile in profiles:
-        if profile["uid"] == uid:
-            return profile
-    raise ValueError("Профиль не найден")
+    with SessionFactory() as session:
+        profile = require_record(session,
+                                 ProfileRecord,
+                                 uid,
+                                 PROFILE_NOT_FOUND)
+        return profile_to_dict(profile)
 
 
 def update_profile(uid, timestamp=None):
     assert uid is not None
-    profile = get_profile(uid)
-    if timestamp is not None:
-        profile["timestamp"] = timestamp
-    return profile
+    with SessionFactory.begin() as session:
+        profile = require_record(session,
+                                 ProfileRecord,
+                                 uid,
+                                 PROFILE_NOT_FOUND)
+        if timestamp is not None:
+            profile.timestamp = timestamp
+        session.flush()
+        return profile_to_dict(profile)
 
 
 def create_query(uid, arg, profile, description, status):
-    validate_new_uid(uid, queries, "Запрос")
-    get_profile(profile)
-
-    query = {
-        "uid": uid,
-        "timestamp": int(time.time()),
-        "arg": arg,
-        "profile": profile,
-        "description": description,
-        "status": status,
-    }
-    queries.append(query)
-    return query
+    with SessionFactory.begin() as session:
+        validate_new_uid(session, QueryRecord, uid, "Запрос")
+        require_record(session, ProfileRecord, profile, PROFILE_NOT_FOUND)
+        values = {
+            "uid": uid,
+            "timestamp": int(time.time()),
+            "arg": arg,
+            "profile": profile,
+            "description": description,
+            "status": status,
+        }
+        query = QueryRecord(**values)
+        session.add(query)
+        session.flush()
+        return query_to_dict(query)
 
 
 def get_queries():
-    return queries
+    with SessionFactory() as session:
+        statement = sa.select(QueryRecord).order_by(QueryRecord.uid)
+        queries = session.scalars(statement).all()
+        return [query_to_dict(query) for query in queries]
 
 
 def get_query(uid):
     assert uid is not None
-    for query in queries:
-        if query["uid"] == uid:
-            return query
-    raise ValueError("Запрос не найден")
+    with SessionFactory() as session:
+        query = require_record(session, QueryRecord, uid, QUERY_NOT_FOUND)
+        return query_to_dict(query)
 
 
 def update_query(uid, arg=None, profile=None, description=None, status=None):
     assert uid is not None
-    query = get_query(uid)
-
-    if arg is not None:
-        query["arg"] = arg
-
-    if profile is not None:
-        get_profile(profile)
-        query["profile"] = profile
-
-    if description is not None:
-        query["description"] = description
-
-    if status is not None:
-        query["status"] = status
-
-    return query
+    with SessionFactory.begin() as session:
+        query = require_record(session, QueryRecord, uid, QUERY_NOT_FOUND)
+        if arg is not None:
+            query.arg = arg
+        if profile is not None:
+            require_record(session, ProfileRecord, profile,
+                           PROFILE_NOT_FOUND)
+            query.profile = profile
+        if description is not None:
+            query.description = description
+        if status is not None:
+            query.status = status
+        session.flush()
+        return query_to_dict(query)
 
 
 def create_feedback(uid, response, status, exception, query):
-    validate_new_uid(uid, feedbacks, "Результат")
-    get_query(query)
-
-    feedback = {
-        "uid": uid,
-        "timestamp": int(time.time()),
-        "response": response,
-        "status": status,
-        "exception": exception,
-        "query": query,
-    }
-    feedbacks.append(feedback)
-    return feedback
+    with SessionFactory.begin() as session:
+        validate_new_uid(session, FeedbackRecord, uid, "Результат")
+        require_record(session, QueryRecord, query, QUERY_NOT_FOUND)
+        values = {
+            "uid": uid,
+            "timestamp": int(time.time()),
+            "response": response,
+            "status": status,
+            "exception": exception,
+            "query": query,
+        }
+        feedback = FeedbackRecord(**values)
+        session.add(feedback)
+        session.flush()
+        return feedback_to_dict(feedback)
 
 
 def get_feedbacks():
-    return feedbacks
+    with SessionFactory() as session:
+        statement = sa.select(FeedbackRecord).order_by(FeedbackRecord.uid)
+        feedbacks = session.scalars(statement).all()
+        return [feedback_to_dict(feedback) for feedback in feedbacks]
 
 
 def get_feedback(uid):
     assert uid is not None
-    for feedback in feedbacks:
-        if feedback["uid"] == uid:
-            return feedback
-    raise ValueError("Обратная связь не найдена")
+    with SessionFactory() as session:
+        message = FEEDBACK_NOT_FOUND
+        feedback = require_record(session, FeedbackRecord, uid, message)
+        return feedback_to_dict(feedback)
 
 
-def update_feedback(uid, response=None, status=None,
-                    exception=None, query=None):
+def update_feedback(uid, response, status, exception, query):
     assert uid is not None
-    feedback = get_feedback(uid)
-
-    if response is not None:
-        feedback["response"] = response
-
-    if status is not None:
-        feedback["status"] = status
-
-    if exception is not None:
-        feedback["exception"] = exception
-
-    if query is not None:
-        get_query(query)
-        feedback["query"] = query
-
-    return feedback
+    with SessionFactory.begin() as session:
+        message = FEEDBACK_NOT_FOUND
+        feedback = require_record(session, FeedbackRecord, uid, message)
+        if response is not None:
+            feedback.response = response
+        if status is not None:
+            feedback.status = status
+        if exception is not None:
+            feedback.exception = exception
+        if query is not None:
+            require_record(session, QueryRecord, query, QUERY_NOT_FOUND)
+            feedback.query = query
+        session.flush()
+        return feedback_to_dict(feedback)
 
 
 def get_recent_exceptions():
-    result = []
-    now = int(time.time())
-
-    for profile in profiles:
-        for query in queries:
-            if profile["uid"] == query["profile"]:
-                for feedback in feedbacks:
-                    query_matches = query["uid"] == feedback["query"]
-                    is_recent = (feedback["timestamp"]
-                                 >= now - RECENT_PERIOD_SECONDS)
-
-                    if query_matches and is_recent:
-                        result.append({
-                            "exception": feedback["exception"],
-                            "description": query["description"],
-                        })
-
-    return result
-
-
-def parse_fields(parts, allowed_fields):
-    result = {}
-
-    for part in parts:
-        if "=" not in part:
-            raise ValueError(
-                "Параметры редактирования задаются как поле=значение")
-
-        key, value = part.split("=", 1)
-
-        if key not in allowed_fields:
-            raise ValueError(f"Неизвестное поле: {key}")
-
-        result[key] = value
-
-    return result
+    threshold = int(time.time()) - RECENT_PERIOD_SECONDS
+    with SessionFactory() as session:
+        statement = sa.select(
+            FeedbackRecord.exception,
+            QueryRecord.description,
+        )
+        statement = statement.join(
+            QueryRecord,
+            QueryRecord.uid == FeedbackRecord.query,
+        )
+        statement = statement.join(
+            ProfileRecord,
+            ProfileRecord.uid == QueryRecord.profile,
+        )
+        statement = statement.where(FeedbackRecord.timestamp >= threshold)
+        rows = session.execute(statement).all()
+        return [
+            {
+                "exception": row.exception,
+                "description": row.description,
+            }
+            for row in rows
+        ]
 
 
-def handle_create_profile(uid):
-    print(create_profile(int(uid)))
-
-
-def handle_get_profiles():
-    print(get_profiles())
-
-
-def handle_get_profile(uid):
-    print(get_profile(int(uid)))
-
-
-def handle_update_profile(uid, timestamp):
-    print(update_profile(int(uid), int(timestamp)))
-
-
-def handle_create_query(uid, arg, profile, description, status):
-    print(create_query(int(uid), arg, int(profile), description, status))
-
-
-def handle_get_queries():
-    print(get_queries())
-
-
-def handle_get_query(uid):
-    print(get_query(int(uid)))
-
-
-def handle_update_query(uid, *fields):
-    allowed_fields = {"arg", "profile", "description", "status"}
-    data = parse_fields(fields, allowed_fields)
-    profile = data.get("profile")
-
-    if profile is not None:
-        profile = int(profile)
-
-    arg = data.get("arg")
-    description = data.get("description")
-    status = data.get("status")
-    print(update_query(int(uid), arg, profile, description, status))
-
-
-def handle_create_feedback(uid, response, status, exception, query):
-    uid = int(uid)
-    query = int(query)
-    print(create_feedback(uid, response, status, exception, query))
-
-
-def handle_get_feedbacks():
-    print(get_feedbacks())
-
-
-def handle_get_feedback(uid):
-    print(get_feedback(int(uid)))
-
-
-def handle_update_feedback(uid, *fields):
-    allowed_fields = {"response", "status", "exception", "query"}
-    data = parse_fields(fields, allowed_fields)
-    query = data.get("query")
-
-    if query is not None:
-        query = int(query)
-
-    response = data.get("response")
-    status = data.get("status")
-    exception = data.get("exception")
-    print(update_feedback(int(uid), response, status, exception, query))
-
-
-def handle_recent():
-    print(get_recent_exceptions())
-
-
-COMMANDS = {
-    "create_profile": handle_create_profile,
-    "get_profiles": handle_get_profiles,
-    "get_profile": handle_get_profile,
-    "update_profile": handle_update_profile,
-    "create_query": handle_create_query,
-    "get_queries": handle_get_queries,
-    "get_query": handle_get_query,
-    "update_query": handle_update_query,
-    "create_feedback": handle_create_feedback,
-    "get_feedbacks": handle_get_feedbacks,
-    "get_feedback": handle_get_feedback,
-    "update_feedback": handle_update_feedback,
-    "recent": handle_recent,
-}
-
-
-def repl():
-    while True:
-        try:
-            parts = input("> ").strip().split()
-
-            if not parts:
-                continue
-
-            command = parts[0]
-
-            if command == "exit":
-                break
-
-            handler = COMMANDS.get(command)
-
-            if handler is None:
-                raise ValueError("Неизвестная команда")
-
-            handler(*parts[1:])
-
-        except ValueError as error:
-            print("Ошибка:", error)
-        except TypeError:
-            print("Ошибка: неверное количество аргументов")
-
-
-if __name__ == "__main__":
-    repl()
+def reset_database():
+    with SessionFactory.begin() as session:
+        session.execute(sa.delete(FeedbackRecord))
+        session.execute(sa.delete(QueryRecord))
+        session.execute(sa.delete(ProfileRecord))
