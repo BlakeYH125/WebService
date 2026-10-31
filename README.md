@@ -119,40 +119,6 @@ http://127.0.0.1:8888
 
 Для остановки сервера нажмите `Ctrl+C`.
 
-## Проверка через HTTP-клиент
-
-Файл `src/demo_http.py` запускает сервер и открывает интерактивную консоль с переменными `client` и `jpeg_path`.
-
-Запуск:
-
-```bash
-python -m src.demo_http
-```
-
-Команды для проверки:
-
-```python
-client.put_insert_profile(1)
-client.get_dump_profile()
-client.get_retrieve_profile(1)
-client.patch_edit_profile(1, 1760000000)
-client.put_insert_query(1, str(jpeg_path), 1)
-client.get_dump_query(1)
-client.get_retrieve_query(1)
-client.patch_edit_query(1, description="Изменённое описание")
-```
-
-```python
-client.get_dump_feedback(1)
-client.get_retrieve_feedback(1)
-client.get_dump_report()
-```
-
-Чтобы использовать другой JPEG-файл, передайте его путь при запуске:
-
-```bash
-python -m src.demo_http /absolute/path/image.jpeg
-```
 
 ## Тестирование HTTP API
 

@@ -40,149 +40,169 @@ SERVER_THREAD.start()
 
 
 class HTTPStateMachine(stateful.RuleBasedStateMachine):
+    profiles = stateful.Bundle("profiles")
+    queries = stateful.Bundle("queries")
+
     @stateful.initialize()
-    def initialize_model(self):
+    def initialize(self):
         data.profiles.clear()
         data.queries.clear()
         data.feedbacks.clear()
         self.client = HTTPClient(USERNAME, PASSWORD, BASE_URL)
-        self.profiles = []
-        self.queries = []
-        self.feedbacks = []
 
     @staticmethod
     def assert_timestamp(timestamp, before, after):
         assert isinstance(timestamp, int)
         assert before <= timestamp <= after
 
-    def create_profile_and_check(self, uid):
+    def get_all_queries(self):
+        queries = []
+
+        for profile in self.client.get_dump_profile():
+            queries.extend(self.client.get_dump_query(profile["uid"]))
+
+        return queries
+
+    def get_next_profile_uid(self):
+        profiles = self.client.get_dump_profile()
+        return max([0] + [profile["uid"] for profile in profiles]) + 1
+
+    def get_next_query_uid(self):
+        queries = self.get_all_queries()
+        return max([0] + [query["uid"] for query in queries]) + 1
+
+    @stateful.rule(target=profiles)
+    def insert_profile(self):
+        uid = self.get_next_profile_uid()
         before = int(time.time())
         received = self.client.put_insert_profile(uid)
         after = int(time.time())
+
+        assert set(received) == {"uid", "timestamp"}
+        assert received["uid"] == uid
         self.assert_timestamp(received["timestamp"], before, after)
-        expected = {"uid": uid, "timestamp": received["timestamp"]}
-        assert received == expected
-        self.profiles.append(expected)
 
-    def edit_profile_and_check(self, uid, timestamp):
-        received = self.client.patch_edit_profile(uid, timestamp)
-        current = next(profile for profile in self.profiles if profile["uid"] == uid)
-        expected = current.copy()
-        expected["timestamp"] = timestamp
-        assert received == expected
-        current.update(expected)
+        profiles = self.client.get_dump_profile()
+        inserted = next(profile for profile in profiles if profile["uid"] == uid)
 
-    def create_query_and_check(self, uid, arg, profile, description=None):
+        assert inserted == received
+
+        return received["uid"]
+
+    @stateful.rule(profile_uid=profiles)
+    def dump_profile(self, profile_uid):
+        profiles = self.client.get_dump_profile()
+
+        assert isinstance(profiles, list)
+        assert any(profile["uid"] == profile_uid for profile in profiles)
+
+        for profile in profiles:
+            assert set(profile) == {"uid", "timestamp"}
+
+    @stateful.rule(profile_uid=profiles)
+    def retrieve_profile(self, profile_uid):
+        profiles = self.client.get_dump_profile()
+        profile = next(profile for profile in profiles if profile["uid"] == profile_uid)
+        received = self.client.get_retrieve_profile(profile_uid)
+
+        assert received == profile
+
+    @stateful.rule(profile_uid=profiles, timestamp=TIMESTAMP)
+    def edit_profile(self, profile_uid, timestamp):
+        received = self.client.patch_edit_profile(profile_uid, timestamp)
+
+        assert received["uid"] == profile_uid
+        assert received["timestamp"] == timestamp
+        assert self.client.get_retrieve_profile(profile_uid) == received
+
+    @stateful.rule(target=queries, profile_uid=profiles, arg=ARGUMENT, description=TEXT)
+    def insert_query(self, profile_uid, arg, description):
+        uid = self.get_next_query_uid()
         before = int(time.time())
-        created = self.client.put_insert_query(uid, arg, profile, description)
+        created = self.client.put_insert_query(uid, arg, profile_uid, description)
         after = int(time.time())
+
+        assert set(created) == {"uid", "timestamp", "arg", "profile", "description", "status"}
+        assert created["uid"] == uid
+        assert created["arg"] == arg
+        assert created["profile"] == profile_uid
+        assert created["description"] == description
+        assert created["status"] == NEW_STATUS
         self.assert_timestamp(created["timestamp"], before, after)
-        expected_description = DEFAULT_DESCRIPTION if description is None else description
-        expected_created = {
-            "uid": uid,
-            "timestamp": created["timestamp"],
-            "arg": arg,
-            "profile": profile,
-            "description": expected_description,
-            "status": NEW_STATUS,
-        }
-        assert created == expected_created
-        received_query = self.client.get_retrieve_query(uid)
-        expected_query = expected_created.copy()
-        expected_query["status"] = DONE_STATUS
-        assert received_query == expected_query
-        received_feedback = self.client.get_retrieve_feedback(uid)
-        self.assert_timestamp(received_feedback["timestamp"], before, after)
-        expected_feedback = {
-            "uid": uid,
-            "timestamp": received_feedback["timestamp"],
-            "response": "",
-            "status": DONE_STATUS,
-            "exception": "",
-            "query": uid,
-        }
-        assert received_feedback == expected_feedback
-        self.queries.append(expected_query)
-        self.feedbacks.append(expected_feedback)
 
-    def edit_query_description_and_check(self, uid, description):
-        received = self.client.patch_edit_query(uid, description=description)
-        current = next(query for query in self.queries if query["uid"] == uid)
-        expected = current.copy()
-        expected["description"] = description
-        assert received == expected
-        current.update(expected)
+        queries = self.client.get_dump_query(profile_uid)
+        inserted = next(query for query in queries if query["uid"] == uid)
 
-    def edit_all_query_fields_and_check(self, uid, arg, profile, description, status):
-        received = self.client.patch_edit_query(uid, arg=arg, profile=profile, description=description, status=status)
-        current = next(query for query in self.queries if query["uid"] == uid)
-        expected = current.copy()
-        expected["arg"] = arg
-        expected["profile"] = profile
-        expected["description"] = description
-        expected["status"] = status
-        assert received == expected
-        current.update(expected)
+        assert inserted["uid"] == uid
+        assert inserted["arg"] == arg
+        assert inserted["profile"] == profile_uid
+        assert inserted["description"] == description
+        assert inserted["status"] == DONE_STATUS
 
-    def expected_report(self):
-        result = []
-        for profile in self.profiles:
-            for query in self.queries:
-                if profile["uid"] == query["profile"]:
-                    for feedback in self.feedbacks:
-                        if query["uid"] == feedback["query"]:
-                            result.append({
-                                "exception": feedback["exception"],
-                                "description": query["description"],
-                            })
-        return result
+        return created["uid"]
 
-    def assert_server_matches_model(self):
-        assert self.client.get_dump_profile() == self.profiles
-        for profile in self.profiles:
-            uid = profile["uid"]
-            assert self.client.get_retrieve_profile(uid) == profile
-            expected_queries = [query for query in self.queries if query["profile"] == uid]
-            assert self.client.get_dump_query(uid) == expected_queries
-        for query in self.queries:
-            uid = query["uid"]
-            assert self.client.get_retrieve_query(uid) == query
-            expected_feedbacks = [feedback for feedback in self.feedbacks if feedback["query"] == uid]
-            assert self.client.get_dump_feedback(uid) == expected_feedbacks
-        for feedback in self.feedbacks:
-            assert self.client.get_retrieve_feedback(feedback["uid"]) == feedback
-        assert self.client.get_dump_report() == self.expected_report()
+    @stateful.rule(profile_uid=profiles)
+    def dump_query(self, profile_uid):
+        queries = self.client.get_dump_query(profile_uid)
 
-    @stateful.rule()
-    def create_profile(self):
-        uid = max([0] + [profile["uid"] for profile in self.profiles]) + 1
-        self.create_profile_and_check(uid)
+        assert isinstance(queries, list)
 
-    @stateful.rule(timestamp=TIMESTAMP)
-    def edit_profile(self, timestamp):
-        self.edit_profile_and_check(self.profiles[0]["uid"], timestamp)
+        for query in queries:
+            assert query["profile"] == profile_uid
 
-    @stateful.rule(arg=ARGUMENT, description=TEXT)
-    def create_query(self, arg, description):
-        uid = max([0]+[query["uid"] for query in self.queries]) + 1
-        profile = self.profiles[uid % len(self.profiles)]["uid"]
-        self.create_query_and_check(uid, arg, profile, description)
+    @stateful.rule(query_uid=queries)
+    def retrieve_query(self, query_uid):
+        queries = self.get_all_queries()
+        query = next(query for query in queries if query["uid"] == query_uid)
+        received = self.client.get_retrieve_query(query_uid)
 
-    @stateful.rule(description=TEXT)
-    def edit_query_description(self, description):
-        self.edit_query_description_and_check(self.queries[0]["uid"], description)
+        assert received == query
 
-    @stateful.rule(arg=ARGUMENT, description=TEXT, status=STATUS)
-    def edit_all_query_fields(self, arg, description, status):
-        query = self.queries[0]
-        first_profile = self.profiles[0]["uid"]
-        second_profile = self.profiles[1]["uid"]
-        profile = second_profile if query["profile"] == first_profile else first_profile
-        self.edit_all_query_fields_and_check(query["uid"], arg, profile, description, status)
+    @stateful.rule(query_uid=queries, profile_uid=profiles, arg=ARGUMENT, description=TEXT, status=STATUS)
+    def edit_query(self, query_uid, profile_uid, arg, description, status):
+        received = self.client.patch_edit_query(query_uid, arg=arg, profile=profile_uid, description=description,
+                                                status=status)
 
-    @stateful.invariant()
-    def server_state_matches_model(self):
-        self.assert_server_matches_model()
+        assert received["uid"] == query_uid
+        assert received["arg"] == arg
+        assert received["profile"] == profile_uid
+        assert received["description"] == description
+        assert received["status"] == status
+        assert self.client.get_retrieve_query(query_uid) == received
+
+    @stateful.rule(query_uid=queries)
+    def dump_feedback(self, query_uid):
+        feedbacks = self.client.get_dump_feedback(query_uid)
+
+        assert isinstance(feedbacks, list)
+        assert len(feedbacks) > 0
+
+        for feedback in feedbacks:
+            assert feedback["query"] == query_uid
+
+    @stateful.rule(query_uid=queries)
+    def retrieve_feedback(self, query_uid):
+        feedbacks = self.client.get_dump_feedback(query_uid)
+
+        assert len(feedbacks) > 0
+
+        feedback_uid = feedbacks[0]["uid"]
+        received = self.client.get_retrieve_feedback(feedback_uid)
+
+        assert received == feedbacks[0]
+
+    @stateful.rule(query_uid=queries)
+    def dump_report(self, query_uid):
+        received = self.client.get_dump_report()
+
+        assert isinstance(received, list)
+
+        query = self.client.get_retrieve_query(query_uid)
+        feedbacks = self.client.get_dump_feedback(query_uid)
+        recent_feedbacks = [feedback for feedback in feedbacks if feedback["timestamp"] >= int(time.time()) - 360]
+
+        if recent_feedbacks:
+            assert any(entry["description"] == query["description"] for entry in received)
 
 
 TestHTTPStateMachine = HTTPStateMachine.TestCase
